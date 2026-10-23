@@ -1,9 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 
 import type { NewWalk } from '@/lib/walk-rules';
 
 export type Walk = NewWalk & {
   id: number;
+  photoUrl: string | null;
   createdAt: Date;
 };
 
@@ -14,10 +16,13 @@ type WalksContextValue = {
   totalMiles: number;
   status: Status;
   refresh: () => Promise<void>;
-  addWalk: (walk: NewWalk) => Promise<void>;
+  addWalk: (walk: NewWalk, photoUri?: string) => Promise<void>;
+  reportWalk: (walkId: number) => Promise<void>;
 };
 
 const WalksContext = createContext<WalksContextValue | null>(null);
+
+const SomethingWentWrong = 'Sorry, something went wrong. Please try again.';
 
 // Walks are stored online by our server (src/app/api/walks+api.ts),
 // so everyone sees the same total.
@@ -43,15 +48,40 @@ export function WalksProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function addWalk(walk: NewWalk) {
-    const response = await fetch('/api/walks', {
+  async function addWalk(walk: NewWalk, photoUri?: string) {
+    // A form (rather than plain JSON) lets us send a photo along with the walk.
+    const form = new FormData();
+    form.append('name', walk.name);
+    form.append('miles', String(walk.miles));
+    if (walk.message) {
+      form.append('message', walk.message);
+    }
+    if (photoUri) {
+      if (Platform.OS === 'web') {
+        form.append('photo', await (await fetch(photoUri)).blob(), 'walk.jpg');
+      } else {
+        // On phones, React Native uploads the file straight from its location on the device.
+        form.append('photo', { uri: photoUri, name: 'walk.jpg', type: 'image/jpeg' } as unknown as Blob);
+      }
+    }
+
+    const response = await fetch('/api/walks', { method: 'POST', body: form });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error ?? SomethingWentWrong);
+    }
+    await refresh();
+  }
+
+  async function reportWalk(walkId: number) {
+    const response = await fetch('/api/report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(walk),
+      body: JSON.stringify({ walkId }),
     });
     if (!response.ok) {
       const data = await response.json().catch(() => null);
-      throw new Error(data?.error ?? 'Sorry, something went wrong. Please try again.');
+      throw new Error(data?.error ?? SomethingWentWrong);
     }
     await refresh();
   }
@@ -62,7 +92,9 @@ export function WalksProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <WalksContext value={{ walks, totalMiles, status, refresh, addWalk }}>{children}</WalksContext>
+    <WalksContext value={{ walks, totalMiles, status, refresh, addWalk, reportWalk }}>
+      {children}
+    </WalksContext>
   );
 }
 

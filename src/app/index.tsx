@@ -1,6 +1,7 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
@@ -9,6 +10,7 @@ import { Challenge } from '@/constants/challenge';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useScreenPadding } from '@/hooks/use-screen-padding';
 import { useTheme } from '@/hooks/use-theme';
+import { confirm } from '@/lib/confirm';
 import { useWalks, type Walk } from '@/lib/walks';
 
 function formatMiles(miles: number) {
@@ -90,7 +92,27 @@ export default function HomeScreen() {
 }
 
 function WalkRow({ walk }: { walk: Walk }) {
+  const { reportWalk } = useWalks();
+  const [reportState, setReportState] = useState<'idle' | 'sending' | 'sent' | string>('idle');
   const date = walk.createdAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+  async function handleReport() {
+    const sure = await confirm(
+      'Report this post?',
+      "If it isn't family friendly, let us know. Posts reported by several people are hidden.",
+      'Report',
+    );
+    if (!sure) {
+      return;
+    }
+    setReportState('sending');
+    try {
+      await reportWalk(walk.id);
+      setReportState('sent');
+    } catch (e) {
+      setReportState(e instanceof Error ? e.message : 'Sorry, something went wrong.');
+    }
+  }
 
   return (
     <ThemedView type="backgroundElement" style={styles.walkRow}>
@@ -101,6 +123,31 @@ function WalkRow({ walk }: { walk: Walk }) {
         </ThemedText>
       </View>
       {walk.message ? <ThemedText type="small">“{walk.message}”</ThemedText> : null}
+      {walk.photoUrl ? (
+        <Image
+          source={{ uri: walk.photoUrl }}
+          style={styles.walkPhoto}
+          contentFit="cover"
+          accessibilityLabel={`Photo from ${walk.name}'s walk`}
+        />
+      ) : null}
+      <View style={styles.reportRow}>
+        {reportState === 'idle' ? (
+          <Pressable accessibilityRole="button" onPress={handleReport} hitSlop={8}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Report
+            </ThemedText>
+          </Pressable>
+        ) : (
+          <ThemedText type="small" themeColor="textSecondary">
+            {reportState === 'sending'
+              ? 'Reporting…'
+              : reportState === 'sent'
+                ? 'Thanks — reported'
+                : reportState}
+          </ThemedText>
+        )}
+      </View>
     </ThemedView>
   );
 }
@@ -167,5 +214,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: Spacing.two,
+  },
+  walkPhoto: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: Spacing.two,
+    marginTop: Spacing.one,
+  },
+  reportRow: {
+    alignItems: 'flex-end',
   },
 });

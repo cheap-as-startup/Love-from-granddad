@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
+import { Guidelines } from '@/components/guidelines';
+import { PhotoPicker } from '@/components/photo-picker';
 import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -20,6 +22,7 @@ export default function LogScreen() {
   const [name, setName] = useState('');
   const [milesText, setMilesText] = useState('');
   const [message, setMessage] = useState('');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,9 +43,10 @@ export default function LogScreen() {
     setSubmitting(true);
     setError(null);
     try {
-      await addWalk(walk);
+      await addWalk(walk, photoUri ?? undefined);
       setMilesText('');
       setMessage('');
+      setPhotoUri(null);
       router.navigate('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sorry, something went wrong. Please try again.');
@@ -94,10 +98,16 @@ export default function LogScreen() {
           />
         </Field>
 
+        <Field label="A photo from your walk (optional)">
+          <PhotoPicker photoUri={photoUri} onChange={setPhotoUri} />
+        </Field>
+
+        <Guidelines />
+
         {error ? <ThemedText style={{ color: theme.accent }}>{error}</ThemedText> : null}
 
         <PrimaryButton
-          title={submitting ? 'Adding…' : 'Add my miles'}
+          title={submitting ? 'Checking and adding…' : 'Add my miles'}
           onPress={handleSubmit}
           disabled={submitting}
         />
