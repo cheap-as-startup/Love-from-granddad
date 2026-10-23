@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
@@ -15,15 +16,25 @@ function formatMiles(miles: number) {
 }
 
 export default function HomeScreen() {
-  const { walks, totalMiles } = useWalks();
+  const { walks, totalMiles, status, refresh } = useWalks();
   const theme = useTheme();
   const padding = useScreenPadding();
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Runs when you pull down on the screen, to fetch the latest walks.
+  async function handleRefresh() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }
 
   const progress = Math.min(totalMiles / Challenge.milesGoal, 1);
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={[styles.content, padding]}>
+      <ScrollView
+        contentContainerStyle={[styles.content, padding]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
         <View style={styles.hero}>
           {/* Swap this placeholder for a photo of Granddad later */}
           <ThemedView type="backgroundElement" style={styles.photo}>
@@ -58,13 +69,20 @@ export default function HomeScreen() {
 
         <View style={styles.wall}>
           <ThemedText type="smallBold">Wall of walks</ThemedText>
-          {walks.length === 0 ? (
+          {status === 'loading' && <ThemedText themeColor="textSecondary">Loading walks…</ThemedText>}
+          {status === 'error' && (
+            <ThemedText themeColor="textSecondary">
+              Couldn&apos;t load the walks. Pull down to try again.
+            </ThemedText>
+          )}
+          {status === 'ready' && walks.length === 0 && (
             <ThemedText themeColor="textSecondary">
               No walks yet — be the first to walk with {Challenge.granddadName}!
             </ThemedText>
-          ) : (
-            walks.map((walk) => <WalkRow key={walk.id} walk={walk} />)
           )}
+          {walks.map((walk) => (
+            <WalkRow key={walk.id} walk={walk} />
+          ))}
         </View>
       </ScrollView>
     </ThemedView>

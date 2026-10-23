@@ -9,10 +9,8 @@ import { Challenge } from '@/constants/challenge';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useScreenPadding } from '@/hooks/use-screen-padding';
 import { useTheme } from '@/hooks/use-theme';
+import { checkWalk, MaxMessageLength, MaxNameLength } from '@/lib/walk-rules';
 import { useWalks } from '@/lib/walks';
-
-// Nobody walks more than this in one go — it catches typos like "50" instead of "5.0".
-const MaxMilesPerWalk = 100;
 
 export default function LogScreen() {
   const { addWalk } = useWalks();
@@ -23,34 +21,34 @@ export default function LogScreen() {
   const [milesText, setMilesText] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit() {
-    // Accept "2,5" as well as "2.5", since both are common ways to write decimals.
-    const miles = Number(milesText.replace(',', '.'));
-
-    if (name.trim() === '') {
-      setError('Please add your name so Granddad knows who walked with him.');
-      return;
-    }
-    if (!Number.isFinite(miles) || miles <= 0) {
-      setError('Please enter how many miles you walked, for example 2.5');
-      return;
-    }
-    if (miles > MaxMilesPerWalk) {
-      setError(`That's a long way! Please enter ${MaxMilesPerWalk} miles or fewer per walk.`);
-      return;
-    }
-
-    addWalk({
+  async function handleSubmit() {
+    const walk = {
       name: name.trim(),
-      miles: Math.round(miles * 10) / 10,
+      // Accept "2,5" as well as "2.5", since both are common ways to write decimals.
+      miles: Math.round(Number(milesText.replace(',', '.')) * 10) / 10,
       message: message.trim() || undefined,
-    });
+    };
 
-    setMilesText('');
-    setMessage('');
+    const problem = checkWalk(walk);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
+    setSubmitting(true);
     setError(null);
-    router.navigate('/');
+    try {
+      await addWalk(walk);
+      setMilesText('');
+      setMessage('');
+      router.navigate('/');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sorry, something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -72,6 +70,7 @@ export default function LogScreen() {
             placeholder="e.g. Auntie Sian"
             autoCapitalize="words"
             autoComplete="name"
+            maxLength={MaxNameLength}
           />
         </Field>
 
@@ -90,14 +89,18 @@ export default function LogScreen() {
             onChangeText={setMessage}
             placeholder="e.g. Walked along the beach for you!"
             multiline
-            maxLength={200}
+            maxLength={MaxMessageLength}
             style={styles.messageInput}
           />
         </Field>
 
         {error ? <ThemedText style={{ color: theme.accent }}>{error}</ThemedText> : null}
 
-        <PrimaryButton title="Add my miles" onPress={handleSubmit} />
+        <PrimaryButton
+          title={submitting ? 'Adding…' : 'Add my miles'}
+          onPress={handleSubmit}
+          disabled={submitting}
+        />
       </ScrollView>
     </ThemedView>
   );
